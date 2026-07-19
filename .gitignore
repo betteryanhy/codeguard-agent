@@ -5,6 +5,10 @@ __pycache__/
 dist/
 build/
 
+# --- Node.js (Frontend) ---
+node_modules/
+frontend/dist/
+
 # --- Environment & Secrets ---
 .env
 .env.local

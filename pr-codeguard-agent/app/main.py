@@ -1,7 +1,9 @@
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from app.api import webhook, results, tasks, config_routes, reports, knowledge, discovery, alerts, scan_strategy
 from app.services.storage import StorageService
 from app.config import settings
@@ -143,3 +145,31 @@ app.include_router(scan_strategy.router)
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Serve frontend static files (optional)
+# If frontend/dist exists, serve it at / and provide SPA fallback.
+# ---------------------------------------------------------------------------
+_frontend_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
+if os.path.isdir(_frontend_dir):
+    # Mount static assets
+    app.mount("/assets", StaticFiles(directory=os.path.join(_frontend_dir, "assets")), name="frontend_assets")
+
+    # SPA catch-all: return index.html for all non-API routes
+    from fastapi.responses import FileResponse
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        # Do not intercept API routes
+        if full_path.startswith("api/") or full_path == "health":
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"detail": "Not Found"}, status_code=404)
+        index_path = os.path.join(_frontend_dir, "index.html")
+        if os.path.isfile(index_path):
+            return FileResponse(index_path, media_type="text/html")
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+
+    logger.info("Frontend static files mounted from %s", _frontend_dir)
+else:
+    logger.info("Frontend dist not found at %s, dashboard UI unavailable", _frontend_dir)
