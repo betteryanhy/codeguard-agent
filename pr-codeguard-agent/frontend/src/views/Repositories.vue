@@ -15,15 +15,19 @@
     <!-- Projects table -->
     <el-table :data="projects" v-loading="loading" stripe border style="width: 100%">
       <el-table-column prop="name" label="项目名称" min-width="180" />
-      <el-table-column prop="namespace" label="命名空间" min-width="180" />
+      <el-table-column label="命名空间" min-width="180">
+        <template #default="{ row }">
+          {{ row.name_with_namespace || row.path_with_namespace || row.namespace || '-' }}
+        </template>
+      </el-table-column>
       <el-table-column label="Webhook 状态" width="140">
         <template #default="{ row }">
           <el-tag
-            :type="row.webhook_installed ? 'success' : 'danger'"
+            :type="row.registered ? 'success' : 'danger'"
             effect="plain"
             size="small"
           >
-            {{ row.webhook_installed ? '已注册' : '未注册' }}
+            {{ row.registered ? '已注册' : '未注册' }}
           </el-tag>
         </template>
       </el-table-column>
@@ -34,7 +38,7 @@
             size="small"
             plain
             @click="handleRegisterProjectWebhook(row)"
-            :disabled="row.webhook_installed"
+            :disabled="row.registered"
           >
             注册 Webhook
           </el-button>
@@ -58,7 +62,7 @@ const fetchProjects = async () => {
   loading.value = true
   try {
     const res = await api.listProjects()
-    projects.value = res.data || []
+    projects.value = (res.data && res.data.projects) || res.data || []
   } catch (e) {
     ElMessage.error('获取项目列表失败: ' + (e.response?.data?.detail || e.message))
   } finally {
@@ -94,7 +98,7 @@ const handleRegisterWebhooks = async () => {
 
 const handleRegisterProjectWebhook = async (row) => {
   try {
-    await api.registerProjectWebhook(row.id)
+    await api.registerProjectWebhook(row.project_id)
     ElMessage.success(`项目 "${row.name}" Webhook 注册成功`)
     await fetchProjects()
   } catch (e) {
