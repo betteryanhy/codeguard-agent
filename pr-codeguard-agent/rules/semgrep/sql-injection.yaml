@@ -1,0 +1,38 @@
+rules:
+  - id: python-sql-injection
+    patterns:
+      - pattern-either:
+          - pattern: |
+              f"...{$INPUT}..."
+          - pattern: |
+              "SELECT ..." + $INPUT
+      - metavariable-regex:
+          metavariable: $INPUT
+          regex: .*
+      - metavariable-analysis:
+          analyzer: entropy
+    message: "Potential SQL injection detected. Use parameterized queries."
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      category: security
+      technology: python
+
+  - id: python-eval-use
+    pattern: eval($INPUT)
+    message: "Use of eval() with user input is dangerous. Use safe alternatives like literal_eval."
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      category: security
+
+  - id: python-exec-use
+    pattern: exec($INPUT)
+    message: "Use of exec() with dynamic input is dangerous."
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      category: security

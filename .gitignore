@@ -1,0 +1,65 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# --- Environment & Secrets ---
+.env
+.env.local
+.env.*.local
+
+# --- Runtime Data ---
+data/
+*.db
+
+# --- Logs ---
+*.log
+
+# --- IDE ---
+.vscode/
+.idea/
+.trae/
+
+# --- Test & CI Cache ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Temp ---
+.tmp/
+tmp/
+
+# --- Test Projects (not part of the agent) ---
+iac-dev-test/
+iac-terraform-test/
+test-python-app/
+test-terraform-check/
+
+# --- Internal Docs (not part of the agent) ---
+docs/superpowers/
+aidlc-docs/
+
+# --- GitLab Config (user-specific) ---
+docker-compose.yml
+webhook.json
+register.json
+
+# --- Misc ---
+resume_text.txt
+skills-lock.json
+_check_mrs.py
+_pr-codeguard/
+
+# --- Agent test scripts (GitLab-specific) ---
+pr-codeguard-agent/trigger_test*.py
+pr-codeguard-agent/trigger_final.py
+pr-codeguard-agent/_*.py
+pr-codeguard-agent/check_*.py
+pr-codeguard-agent/manual_check.py
+pr-codeguard-agent/test_setup.py
+pr-codeguard-agent/test_e2e_verify.py
+pr-codeguard-agent/run_final_test.py
+pr-codeguard-agent/start_agent.py
+pr-codeguard-agent/*.log

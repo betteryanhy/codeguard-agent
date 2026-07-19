@@ -1,0 +1,26 @@
+# Custom Gitleaks rules for PR-CodeGuard
+title = "PR-CodeGuard Custom Rules"
+
+[[rules]]
+id = "custom-api-key"
+description = "Detected API key pattern"
+regex = '''(?i)(api[_-]?key|apikey|api[._-]?secret)\s*[:=]\s*["'][A-Za-z0-9_\-]{16,}["']'''
+tags = ["custom", "api-key"]
+
+[[rules]]
+id = "generic-password"
+description = "Detected hardcoded password"
+regex = '''(?i)(password|passwd|pwd)\s*[:=]\s*["'][^"']{6,}["']'''
+tags = ["custom", "password"]
+
+[[rules]]
+id = "aws-access-key"
+description = "Detected AWS Access Key"
+regex = '''(?:A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}'''
+tags = ["custom", "aws", "key"]
+
+[[rules]]
+id = "generic-token"
+description = "Detected generic token pattern"
+regex = '''(?i)(token|secret|credential)\s*[:=]\s*["'][A-Za-z0-9_\-]{20,}["']'''
+tags = ["custom", "token"]
