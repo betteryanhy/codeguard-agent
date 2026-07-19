@@ -55,6 +55,12 @@ const routes = [
         component: () => import('../views/Alerts.vue'),
         meta: { title: '告警系统' },
       },
+      {
+        path: '/chat',
+        name: 'Chat',
+        component: () => import('../views/Chat.vue'),
+        meta: { title: 'Agent 对话' },
+      },
     ],
   },
 ]

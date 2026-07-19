@@ -4,7 +4,7 @@ import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from app.api import webhook, results, tasks, config_routes, reports, knowledge, discovery, alerts, scan_strategy
+from app.api import webhook, results, tasks, config_routes, reports, knowledge, discovery, alerts, scan_strategy, chat
 from app.services.storage import StorageService
 from app.config import settings
 
@@ -140,6 +140,7 @@ app.include_router(knowledge.router)
 app.include_router(discovery.router)
 app.include_router(alerts.router)
 app.include_router(scan_strategy.router)
+app.include_router(chat.router)
 
 
 @app.get("/health")

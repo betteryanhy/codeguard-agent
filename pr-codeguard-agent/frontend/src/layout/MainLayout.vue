@@ -40,6 +40,10 @@
           <el-icon><WarningFilled /></el-icon>
           <template #title>告警系统</template>
         </el-menu-item>
+        <el-menu-item index="/chat" style="margin-top: 4px; border-top: 1px solid #f0f0f0">
+          <el-icon><ChatDotRound /></el-icon>
+          <template #title>Agent 对话</template>
+        </el-menu-item>
       </el-menu>
     </el-aside>
 
