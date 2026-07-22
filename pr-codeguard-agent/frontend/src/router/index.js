@@ -3,64 +3,24 @@ import MainLayout from '../layout/MainLayout.vue'
 
 const routes = [
   {
+    path: '/login',
+    name: 'Login',
+    component: () => import('../views/Login.vue'),
+    meta: { title: '登录' },
+  },
+  {
     path: '/',
     component: MainLayout,
     redirect: '/dashboard',
     children: [
-      {
-        path: '/dashboard',
-        name: 'Dashboard',
-        component: () => import('../views/Dashboard.vue'),
-        meta: { title: '概览' },
-      },
-      {
-        path: '/repositories',
-        name: 'Repositories',
-        component: () => import('../views/Repositories.vue'),
-        meta: { title: '仓库列表' },
-      },
-      {
-        path: '/tasks',
-        name: 'Tasks',
-        component: () => import('../views/Tasks.vue'),
-        meta: { title: '扫描任务' },
-      },
-      {
-        path: '/tasks/:id',
-        name: 'TaskDetail',
-        component: () => import('../views/TaskDetail.vue'),
-        meta: { title: '任务详情' },
-      },
-      {
-        path: '/strategy',
-        name: 'Strategy',
-        component: () => import('../views/Strategy.vue'),
-        meta: { title: '扫描策略' },
-      },
-      {
-        path: '/knowledge',
-        name: 'Knowledge',
-        component: () => import('../views/Knowledge.vue'),
-        meta: { title: '知识库搜索' },
-      },
-      {
-        path: '/reports',
-        name: 'Reports',
-        component: () => import('../views/Reports.vue'),
-        meta: { title: '日报 & 趋势' },
-      },
-      {
-        path: '/alerts',
-        name: 'Alerts',
-        component: () => import('../views/Alerts.vue'),
-        meta: { title: '告警系统' },
-      },
-      {
-        path: '/chat',
-        name: 'Chat',
-        component: () => import('../views/Chat.vue'),
-        meta: { title: 'Agent 对话' },
-      },
+      { path: '/dashboard', name: 'Dashboard', component: () => import('../views/Dashboard.vue'), meta: { title: '仪表盘' } },
+      { path: '/risk', name: 'Risk', component: () => import('../views/Risk.vue'), meta: { title: '分支风险' } },
+      { path: '/tasks', name: 'Tasks', component: () => import('../views/Tasks.vue'), meta: { title: '任务管理' } },
+      { path: '/strategy', name: 'Strategy', component: () => import('../views/Strategy.vue'), meta: { title: '扫描策略' } },
+      { path: '/settings', name: 'Settings', component: () => import('../views/Settings.vue'), meta: { title: '系统设置' } },
+      { path: '/audit-log', name: 'AuditLog', component: () => import('../views/AuditLog.vue'), meta: { title: '审计日志' } },
+      { path: '/assistant', name: 'Assistant', component: () => import('../views/Assistant.vue'), meta: { title: '问答助手' } },
+      { path: '/:pathMatch(.*)*', name: 'NotFound', component: () => import('../views/NotFound.vue'), meta: { title: '页面未找到' } },
     ],
   },
 ]
@@ -68,6 +28,18 @@ const routes = [
 const router = createRouter({
   history: createWebHashHistory(),
   routes,
+})
+
+// 导航守卫
+router.beforeEach((to, from, next) => {
+  const token = localStorage.getItem('token')
+  if (to.path !== '/login' && !token) {
+    next('/login')
+  } else if (to.path === '/login' && token) {
+    next('/dashboard')
+  } else {
+    next()
+  }
 })
 
 export default router

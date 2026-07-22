@@ -8,6 +8,7 @@ class ScanTask(BaseModel):
     repo_url: str
     mr_id: int
     mr_title: str = ""
+    source_branch: str = ""
     status: str = "pending"
     error_message: str = ""
     findings: list[Finding] = []

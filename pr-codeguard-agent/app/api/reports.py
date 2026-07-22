@@ -209,7 +209,7 @@ async def daily_report(
 @router.get("/trends")
 async def trends(
     period: str = Query(default="weekly", description="Aggregation period: weekly or monthly"),
-    count: int = Query(default=8, ge=2, le=52, description="Number of periods to look back"),
+    count: int = Query(default=8, ge=1, le=52, description="Number of periods to look back"),
     repo_url: str = Query(default="", description="Filter by repository URL"),
 ):
     """Get trend data for code activity over time.
@@ -237,10 +237,89 @@ async def trends(
 
     summary = analyzer.get_trend_summary(repo_url)
 
+    # Add scan task counts from task storage
+    try:
+        from app.services.storage import StorageService, TaskRecord
+        from sqlalchemy import select, func
+        from sqlalchemy.ext.asyncio import AsyncSession
+        store = StorageService()
+    except Exception:
+        store = None
+
+    # Normalize data fields for frontend compatibility
+    normalized_data = []
+    for item in data:
+        normalized = dict(item)
+        normalized["date"] = item.get("period", "")
+        normalized["day"] = item.get("period", "")
+        normalized["scan_count"] = item.get("mr_count", 0) + item.get("commit_count", 0)
+        if "count" not in normalized:
+            normalized["count"] = normalized["scan_count"]
+
+        # Augment with actual scan task count from storage
+        if store:
+            try:
+                start = item.get("start", "")
+                end = item.get("end", "")
+                if start:
+                    from datetime import datetime
+                    from sqlalchemy import and_
+                    start_dt = datetime.fromisoformat(start)
+                    end_dt = datetime.fromisoformat(end) if end else None
+                    async with AsyncSession(store.engine) as session:
+                        q = select(func.count(TaskRecord.id)).where(
+                            and_(
+                                TaskRecord.created_at >= start_dt,
+                                TaskRecord.created_at < end_dt if end_dt else True,
+                            )
+                        )
+                        result = await session.execute(q)
+                        task_count = result.scalar() or 0
+                        if task_count > 0:
+                            normalized["scan_count"] = task_count
+                            normalized["count"] = task_count
+            except Exception:
+                pass
+
+        normalized_data.append(normalized)
+
+    # If no data has non-zero scan counts, add current period with actual task data
+    if not any(d.get("scan_count", 0) > 0 for d in normalized_data):
+        try:
+            from app.services.storage import StorageService
+            from sqlalchemy import select, func
+            from sqlalchemy.ext.asyncio import AsyncSession
+            from app.services.storage import TaskRecord
+            store = StorageService()
+            from datetime import datetime, timedelta
+            now = datetime.utcnow()
+            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            async with AsyncSession(store.engine) as session:
+                q = select(func.count(TaskRecord.id)).where(TaskRecord.created_at >= today_start)
+                result = await session.execute(q)
+                today_count = result.scalar() or 0
+            if today_count > 0:
+                today_label = now.strftime("%m/%d")
+                normalized_data.append({
+                    "period": today_label,
+                    "date": today_label,
+                    "day": today_label,
+                    "scan_count": today_count,
+                    "count": today_count,
+                    "start": today_start.isoformat(),
+                    "end": now.isoformat(),
+                    "mr_count": 0,
+                    "commit_count": 0,
+                    "developer_count": 0,
+                    "risk_count": 0,
+                })
+        except Exception:
+            pass
+
     return {
         "period": period,
         "count": len(data),
-        "data": data,
+        "data": normalized_data,
         "summary": summary,
     }
 

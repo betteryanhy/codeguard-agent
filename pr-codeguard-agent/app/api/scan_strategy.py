@@ -20,7 +20,7 @@ def _get_mgr(request: Request):
 async def get_default_strategy(request: Request):
     """Get the global default scan strategy."""
     mgr = _get_mgr(request)
-    strategy = mgr.get_strategy("__default__")
+    strategy = mgr.get_default()
     return strategy.to_dict()
 
 
@@ -28,7 +28,7 @@ async def get_default_strategy(request: Request):
 async def update_default_strategy(request: Request, config: dict = Body(...)):
     """Update the global default scan strategy."""
     mgr = _get_mgr(request)
-    current = mgr.get_strategy("__default__")
+    current = mgr.get_default()
 
     # Apply updates
     for key, val in config.items():
@@ -70,22 +70,25 @@ async def set_repo_strategy(
     """Create or update strategy for a specific repository.
 
     Only provided fields will be updated; missing fields keep defaults.
+    Engine overrides merge with, rather than replace, existing engine config.
     """
     mgr = _get_mgr(request)
     current = mgr.get_strategy(repo_url)
 
     # If this repo has no custom strategy yet, copy defaults first
     if current.repo_url != repo_url:
-        default = mgr.get_strategy("__default__")
+        default = mgr.get_default()
         current = ScanStrategy(repo_url=repo_url)
-        # Copy default values
         for field in ScanStrategy.__dataclass_fields__:
             if field not in ("repo_url", "created_at", "updated_at"):
                 setattr(current, field, getattr(default, field))
 
     # Apply updates
     for key, val in config.items():
-        if hasattr(current, key):
+        if key == "engines_enabled" and isinstance(val, dict):
+            # Merge partial engine overrides
+            current.engines_enabled.update(val)
+        elif hasattr(current, key):
             setattr(current, key, val)
 
     if current.scan_level not in VALID_LEVELS:

@@ -53,7 +53,6 @@ register.json
 # --- Misc ---
 resume_text.txt
 skills-lock.json
-_check_mrs.py
 _pr-codeguard/
 
 # --- Agent test scripts (GitLab-specific) ---
@@ -67,3 +66,38 @@ pr-codeguard-agent/test_e2e_verify.py
 pr-codeguard-agent/run_final_test.py
 pr-codeguard-agent/start_agent.py
 pr-codeguard-agent/*.log
+
+# --- Root-level test/ad-hoc scripts (often contain tokens) ---
+_*.py
+check_*.py
+batch_scan.py
+complete_merge.py
+create_*.py
+diagnose_*.py
+do_merge.py
+fix_*.py
+inject_*.py
+list_*.py
+mr_and_merge.py
+push_missing_files.py
+rescan_and_verify.py
+setup_gitlab.py
+simulate_activity.py
+sync_to_*.py
+test_*.py
+trigger_*.py
+verify_*.py
+codeguard_bot_token.txt
+create_token.rb
+gitlab_access.md
+null
+package-lock.json
+package.json
+
+# --- Test assets & binaries ---
+.playwright/
+_branch_clone/
+_fresh_clone/
+_scan_target/
+test-screenshots/
+tools/

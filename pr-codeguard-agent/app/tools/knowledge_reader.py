@@ -1,5 +1,6 @@
 """Tool for reading and searching the knowledge base."""
 
+import json
 import logging
 from typing import Optional
 

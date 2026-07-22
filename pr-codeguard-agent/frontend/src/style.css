@@ -1,41 +1,99 @@
-body {
+/* ── Global Base Styles ──────────────────────────────────────── */
+html, body, #app {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background-color: #f5f7fa;
+  padding: 0;
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+  font-size: var(--fs-base);
+  color: var(--text-primary);
+  background: var(--bg-page);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-#app {
-  min-height: 100vh;
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
-.sidebar-logo {
-  height: 60px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #409eff;
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  border-bottom: 1px solid #e6e6e6;
+/* ── Card & shadow overrides ── */
+.el-card {
+  border-radius: var(--radius-md) !important;
+  border: 1px solid #ebeef5;
+  box-shadow: var(--shadow-card) !important;
+  transition: box-shadow 0.25s ease, transform 0.25s ease;
+}
+.el-card:hover {
+  box-shadow: var(--shadow-hover) !important;
 }
 
-.sidebar-logo span {
-  margin-left: 8px;
-  font-size: 16px;
-  color: #303133;
+/* ── Table density ── */
+.el-table {
+  font-size: var(--fs-sm);
+}
+.el-table th.el-table__cell {
+  font-weight: 600;
+  color: var(--text-regular);
+  background: #fafafa;
 }
 
-.stat-card {
-  transition: transform 0.2s;
+/* ── Tag sizing ── */
+.el-tag {
+  border-radius: var(--radius-sm);
 }
 
-.stat-card:hover {
-  transform: translateY(-2px);
+/* ── Dialog ── */
+.el-dialog__header {
+  padding: var(--sp-md) var(--sp-lg);
+  border-bottom: 1px solid #ebeef5;
+  margin-right: 0 !important;
+}
+.el-dialog__body {
+  padding: var(--sp-lg);
 }
 
-.finding-blocker { color: #f56c6c; }
-.finding-critical { color: #e6a23c; }
-.finding-major { color: #409eff; }
-.finding-minor { color: #909399; }
-.finding-info { color: #67c23a; }
+/* ── Empty state container ── */
+.empty-state {
+  text-align: center;
+  padding: var(--sp-xl) var(--sp-md);
+  color: var(--text-secondary);
+}
+
+/* ── Severity tags ── */
+.sev-tag {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+.sev-tag.critical { color: #f56c6c; background: #fef0f0; }
+.sev-tag.major { color: #e6a23c; background: #fdf6ec; }
+.sev-tag.minor { color: #409eff; background: #ecf5ff; }
+.sev-tag.info { color: #909399; background: #f4f4f5; }
+
+/* ── Code font ── */
+code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  background: #f5f7fa;
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d0d5dd;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b0b5bd;
+}

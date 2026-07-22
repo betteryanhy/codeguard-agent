@@ -1,84 +1,105 @@
+import logging
 from fastapi import APIRouter, HTTPException
 from app.models.task import ScanTask
 from app.services.storage import StorageService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/results", tags=["results"])
 
 storage = StorageService()
 
-# Keep in-memory store temporarily for webhook compatibility
-_tasks: dict[str, ScanTask] = {}
+
+# Kept for backward compatibility: webhook.py imports this.
+# Task persistence is handled via StorageService internally.
+async def store_task(task: ScanTask):
+    """Persist a scan task to storage."""
+    await storage.save_task(task)
 
 
-def store_task(task: ScanTask):
-    """Store task in both memory and persistent storage."""
-    _tasks[task.id] = task
-    # Try persistent save (best effort) — only schedule on a running loop
-    import asyncio
-    try:
-        loop = asyncio.get_running_loop()
-        if loop.is_running():
-            loop.create_task(storage.save_task(task))
-    except (RuntimeError, Exception):
-        # No running loop (background thread after asyncio.run finishes) — skip
-        pass
+def _resolve_findings(task: ScanTask) -> list:
+    """Extract findings from a task as serializable dicts, deduplicated."""
+    findings = task.findings or []
+    seen = set()
+    deduped = []
+    for f in findings:
+        key = (f.engine, f.file_path, f.line, f.message)
+        if key not in seen:
+            seen.add(key)
+            deduped.append(f)
+    return [
+        {
+            "severity": f.severity,
+            "engine": f.engine,
+            "message": f.message,
+            "file_path": f.file_path,
+            "line": f.line,
+            "code_snippet": getattr(f, "code_snippet", ""),
+            "recommendation": getattr(f, "recommendation", ""),
+            "rule_id": getattr(f, "rule_id", ""),
+        }
+        for f in deduped
+    ]
 
 
-def get_task(task_id: str) -> ScanTask | None:
-    """Get task from memory first, fall back to storage."""
-    if task_id in _tasks:
-        return _tasks[task_id]
-    # Try storage (sync wrapper around async)
-    import asyncio
-    try:
-        loop = asyncio.get_running_loop()
-        return loop.run_until_complete(storage.get_task(task_id))
-    except (RuntimeError, Exception):
-        return None
+def _task_to_dict(task: ScanTask) -> dict:
+    """Serialize a ScanTask for API response."""
+    findings = _resolve_findings(task)
+    by_severity = {"critical": 0, "major": 0, "minor": 0, "info": 0}
+    for f in findings:
+        sev = (f.get("severity") or "info").lower()
+        if sev in by_severity:
+            by_severity[sev] += 1
+    return {
+        "id": task.id,
+        "repo_url": task.repo_url,
+        "mr_id": task.mr_id,
+        "mr_title": task.mr_title or "",
+        "branch_name": task.source_branch or "main",
+        "status": task.status,
+        "total_findings": len(findings),
+        "summary": {"by_severity": by_severity},
+        "findings": findings,
+        "created_at": task.created_at.isoformat() if task.created_at else None,
+        "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+        "error_message": task.error_message or "",
+    }
 
 
 @router.get("/{task_id}")
 async def get_results(task_id: str):
-    task = get_task(task_id)
+    """Get full task results including findings from persistent storage."""
+    try:
+        task = await storage.get_task(task_id)
+    except Exception as e:
+        logger.warning("Storage lookup failed for task %s: %s", task_id, e)
+        task = None
+
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    return task
+    return _task_to_dict(task)
 
 
 @router.get("/{task_id}/summary")
 async def get_summary(task_id: str):
-    task = get_task(task_id)
+    """Get a lightweight summary of task results."""
+    try:
+        task = await storage.get_task(task_id)
+    except Exception as e:
+        logger.warning("Storage lookup failed for task %s: %s", task_id, e)
+        task = None
+
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+
     severity_order = ["blocker", "critical", "major", "minor", "info"]
+    findings = task.findings or []
     return {
         "task_id": task.id,
         "status": task.status,
-        "total_findings": len(task.findings),
+        "total_findings": len(findings),
         "grouped": {
-            s: len([f for f in task.findings if f.severity == s])
+            s: len([f for f in findings if f.severity == s])
             for s in severity_order
         },
     }
-
-
-@router.get("/")
-async def list_tasks(skip: int = 0, limit: int = 50):
-    """List recent scan tasks."""
-    try:
-        import asyncio
-        loop = asyncio.get_event_loop()
-        tasks = await storage.list_tasks(limit=limit, offset=skip)
-        return [
-            {
-                "id": t.id,
-                "repo_url": t.repo_url,
-                "mr_id": t.mr_id,
-                "status": t.status,
-                "total_findings": len(t.findings),
-                "created_at": t.created_at.isoformat() if t.created_at else None,
-            }
-            for t in tasks
-        ]
-    except Exception as e:
-        return {"error": str(e), "tasks": list(_tasks.values())[skip:skip + limit]}

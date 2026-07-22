@@ -6,7 +6,13 @@ from fastapi import APIRouter, Request, HTTPException
 from app.config import settings
 from app.models.task import ScanTask
 from app.utils.helpers import generate_task_id
-from app.api.results import store_task
+from app.services.storage import StorageService
+
+_storage = StorageService()
+
+async def _store_task(task):
+    """Persist task to storage."""
+    await _storage.save_task(task)
 
 logger = logging.getLogger(__name__)
 
@@ -68,9 +74,10 @@ async def handle_gitlab_webhook(request: Request):
         repo_url=repo_url,
         mr_id=mr_id,
         mr_title=mr_data.get("title", ""),
+        source_branch=source_branch,
         status="pending",
     )
-    store_task(task)
+    await _store_task(task)
 
     # Get strategy manager from app state
     strategy_mgr = getattr(request.app.state, "scan_strategy_manager", None)
@@ -122,15 +129,18 @@ async def _execute_scan(
 ):
     """Run scan pipeline and post comment asynchronously.
 
-    Uses AgentBrain for decision-making and tool orchestration,
-    with fallback to the original hard-coded pipeline.
+    Uses Orchestrator directly for scan, then posts comment via GitLab.
     """
     try:
-        from app.services.gitlab_client import GitLabClient
+        if not should_scan:
+            task.status = "completed"
+            await _store_task(task)
+            return
 
         # Get changed files from GitLab
         diff_files = None
         try:
+            from app.services.gitlab_client import GitLabClient
             client = GitLabClient()
             mr_changes = client.get_mr_changes(repo_url, mr_id)
             diff_files = [c.get("new_path", "") for c in mr_changes.get("changes", []) if c.get("new_path")]
@@ -138,30 +148,52 @@ async def _execute_scan(
         except Exception as e:
             logger.warning(f"[{task.id}] Failed to get MR changes: {e}")
 
-        # Use AgentBrain to process the MR event (with strategy config)
-        from app.agent.brain import AgentBrain
-        brain = AgentBrain(strategy_mgr=strategy_mgr)
-        result = await brain.process_mr_event(
-            task_id=task.id,
-            repo_url=repo_url,
-            mr_id=mr_id,
+        # Run scan directly via Orchestrator
+        from app.services.orchestrator import Orchestrator
+        orchestrator = Orchestrator()
+        result = await orchestrator.run_scan(
+            task=task,
             source_branch=source_branch,
             target_branch=target_branch,
-            mr_title=task.mr_title,
             diff_files=diff_files,
-            author=author,
-            should_scan=should_scan,
+            ai_enabled=False,
+            tf_change_detection=False,
         )
 
-        # Update task with findings
-        task.findings = result.get("findings", [])
-        task.status = "completed"
-        task.completed_at = __import__("datetime").datetime.utcnow()
-        store_task(task)
-        logger.info(f"[{task.id}] AgentBrain completed: {result.get('findings_count', 0)} findings")
+        task = result
+        await _store_task(task)
+        logger.info(f"[{task.id}] Scan completed: {len(task.findings)} findings")
+
+        # Analyze Terraform changes from raw diffs
+        tf_analysis = None
+        try:
+            from app.services.gitlab_client import GitLabClient
+            gc = GitLabClient()
+            raw_diffs = gc.get_mr_raw_diffs(repo_url, mr_id)
+            if raw_diffs:
+                from app.engine.tf_diff_analyzer import analyze_tf_changes
+                tf_analysis = analyze_tf_changes(raw_diffs)
+                if tf_analysis and tf_analysis.get("has_tf_changes"):
+                    logger.info(f"[{task.id}] Detected {len(tf_analysis['added_resources'])} added, "
+                                f"{len(tf_analysis['removed_resources'])} removed, "
+                                f"{len(tf_analysis['modified_resources'])} modified TF resources")
+        except Exception as e:
+            logger.warning(f"[{task.id}] Failed to analyze TF changes: {e}")
+
+        # Post comment to MR (always post, even with 0 findings)
+        try:
+            from app.services.comment_builder import CommentBuilder
+            builder = CommentBuilder()
+            comment = builder.build_review(task.findings, tf_analysis=tf_analysis)
+            if comment:
+                gc = GitLabClient()
+                gc.cleanup_bot_comments(repo_url, mr_id)
+                gc.post_mr_comment(repo_url, mr_id, comment)
+        except Exception as e:
+            logger.warning(f"[{task.id}] Failed to post comment: {e}")
 
     except Exception as e:
         logger.error(f"[{task.id}] Scan execution failed: {e}")
         task.status = "failed"
         task.error_message = str(e)
-        store_task(task)
+        await _store_task(task)

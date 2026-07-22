@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CodeGuard Q&A - 开发活动查询</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      max-width: 860px; margin: 0 auto; padding: 24px 20px;
+      background: #f8f9fa; color: #1a1a2e; min-height: 100vh;
+    }
+    h1 {
+      font-size: 24px; font-weight: 600; margin-bottom: 4px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    h1 span { font-size: 16px; font-weight: 400; color: #666; }
+    .subtitle { color: #666; font-size: 14px; margin-bottom: 24px; }
+
+    .examples {
+      display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px;
+    }
+    .examples button {
+      padding: 6px 14px; font-size: 13px; border: 1px solid #dde1e6;
+      border-radius: 16px; background: white; color: #1a73e8;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .examples button:hover {
+      background: #1a73e8; color: white; border-color: #1a73e8;
+    }
+
+    .input-area {
+      display: flex; gap: 8px; margin-bottom: 20px;
+    }
+    .input-area textarea {
+      flex: 1; padding: 12px 14px; font-size: 15px;
+      border: 1px solid #dde1e6; border-radius: 8px;
+      resize: none; font-family: inherit;
+      transition: border-color 0.15s;
+    }
+    .input-area textarea:focus {
+      outline: none; border-color: #1a73e8; box-shadow: 0 0 0 3px rgba(26,115,232,0.12);
+    }
+    .input-area button {
+      padding: 10px 24px; font-size: 15px; font-weight: 500;
+      background: #1a73e8; color: white; border: none; border-radius: 8px;
+      cursor: pointer; white-space: nowrap; transition: background 0.15s;
+    }
+    .input-area button:hover { background: #1557b0; }
+    .input-area button:disabled { background: #99bdf2; cursor: not-allowed; }
+
+    .loading {
+      display: none; align-items: center; gap: 8px;
+      padding: 12px 16px; margin-bottom: 16px;
+      background: #e8f0fe; border-radius: 8px; font-size: 14px; color: #1a73e8;
+    }
+    .loading.show { display: flex; }
+    .spinner {
+      width: 16px; height: 16px; border: 2px solid #99bdf2;
+      border-top-color: #1a73e8; border-radius: 50%; animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .result-card {
+      display: none; background: white; border: 1px solid #e0e0e0;
+      border-radius: 10px; padding: 20px 24px; margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .result-card.show { display: block; }
+
+    .result-header { font-size: 14px; color: #666; margin-bottom: 12px; }
+    .result-answer {
+      font-size: 15px; line-height: 1.7; white-space: pre-wrap;
+      font-family: "Courier New", monospace;
+      background: #f5f5f5; padding: 16px; border-radius: 6px;
+    }
+    .result-footer {
+      margin-top: 12px; font-size: 13px; color: #999;
+      display: flex; justify-content: space-between;
+    }
+    .error-msg {
+      color: #d93025; background: #fce8e6; padding: 12px 16px;
+      border-radius: 8px; font-size: 14px; margin-bottom: 16px; display: none;
+    }
+    .error-msg.show { display: block; }
+
+    .trends-section { margin-top: 32px; }
+    .trends-section h2 {
+      font-size: 18px; font-weight: 600; margin-bottom: 16px;
+    }
+    .trends-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+    }
+    .trend-card {
+      background: white; border: 1px solid #e0e0e0; border-radius: 8px;
+      padding: 14px 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .trend-card .name { font-weight: 600; font-size: 15px; }
+    .trend-card .stat { font-size: 13px; color: #666; margin-top: 4px; }
+    .trend-card .stat strong { color: #1a73e8; }
+
+    .empty-state {
+      text-align: center; padding: 40px 20px; color: #999;
+    }
+    .empty-state p { font-size: 14px; margin-top: 8px; }
+    @media (max-width: 600px) {
+      .input-area { flex-direction: column; }
+      .input-area button { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>CodeGuard Q&A <span>开发活动查询</span></h1>
+  <p class="subtitle">通过自然语言查询代码提交、MR合并、开发者活动等记录</p>
+
+  <div class="examples">
+    <button onclick="fillExample(this)">user_service.go 最近谁改过？</button>
+    <button onclick="fillExample(this)">payment 模块有什么变更？</button>
+    <button onclick="fillExample(this)">昨天有什么高危MR？</button>
+    <button onclick="fillExample(this)">最近7天活动趋势</button>
+    <button onclick="fillExample(this)">张三最近提交了什么？</button>
+    <button onclick="fillExample(this)">上周有什么高风险变更？</button>
+  </div>
+
+  <div class="input-area">
+    <textarea id="question" rows="2" placeholder="输入问题，例如：user_service.go 这个文件最近谁改过？" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();ask();}"></textarea>
+    <button id="askBtn" onclick="ask()">查询</button>
+  </div>
+
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <span>正在查询知识库...</span>
+  </div>
+
+  <div class="error-msg" id="errorMsg"></div>
+
+  <div class="result-card" id="resultCard">
+    <div class="result-header">查询结果</div>
+    <div class="result-answer" id="resultAnswer"></div>
+    <div class="result-footer">
+      <span id="resultCount"></span>
+      <span id="resultTime"></span>
+    </div>
+  </div>
+
+  <div class="trends-section">
+    <h2>近7天开发活动</h2>
+    <div id="trendsGrid" class="trends-grid"></div>
+  </div>
+
+  <script>
+    async function ask() {
+      const q = document.getElementById('question').value.trim();
+      if (!q) return;
+
+      const btn = document.getElementById('askBtn');
+      const loading = document.getElementById('loading');
+      const errorMsg = document.getElementById('errorMsg');
+      const resultCard = document.getElementById('resultCard');
+
+      btn.disabled = true;
+      loading.classList.add('show');
+      errorMsg.classList.remove('show');
+      resultCard.classList.remove('show');
+
+      const startTime = Date.now();
+
+      try {
+        const res = await fetch('/api/v1/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: q })
+        });
+        const data = await res.json();
+
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+
+        if (!res.ok) {
+          showError(data.detail || '查询失败');
+          return;
+        }
+
+        document.getElementById('resultAnswer').textContent = data.answer || '(无结果)';
+        document.getElementById('resultCount').textContent =
+          `来源：${data.source_count || 0} 条记录`;
+        document.getElementById('resultTime').textContent = `${elapsed}秒`;
+        resultCard.classList.add('show');
+      } catch (err) {
+        showError('网络错误，请确认Agent服务正在运行');
+      } finally {
+        btn.disabled = false;
+        loading.classList.remove('show');
+      }
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('errorMsg');
+      el.textContent = msg;
+      el.classList.add('show');
+    }
+
+    function fillExample(btn) {
+      document.getElementById('question').value = btn.textContent;
+      // Auto-trigger for trends
+      if (btn.textContent.includes('活动趋势')) {
+        ask();
+      }
+    }
+
+    // Load trends on page load
+    async function loadTrends() {
+      const grid = document.getElementById('trendsGrid');
+      try {
+        const res = await fetch('/api/v1/query/trends?days=7');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data.authors || data.authors.length === 0) {
+          grid.innerHTML = '<div class="empty-state"><p>暂无活动数据</p></div>';
+          return;
+        }
+        grid.innerHTML = data.authors.map(a => `
+          <div class="trend-card">
+            <div class="name">${escHtml(a.name)}</div>
+            <div class="stat">提交: <strong>${a.commit_count}</strong> 次</div>
+            <div class="stat">变更: ${a.total_changes} 个文件</div>
+          </div>
+        `).join('');
+      } catch {
+        grid.innerHTML = '<div class="empty-state"><p>无法加载趋势数据</p></div>';
+      }
+    }
+
+    function escHtml(s) {
+      const d = document.createElement('div');
+      d.textContent = s || '';
+      return d.innerHTML;
+    }
+
+    loadTrends();
+  </script>
+</body>
+</html>

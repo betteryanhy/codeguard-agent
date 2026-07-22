@@ -26,17 +26,31 @@ class Orchestrator:
         from app.engine.sast_scanner import SastScanner
         from app.engine.iac_scanner import IacScanner
         from app.engine.best_practice import BestPracticeScanner
+        from app.engine.trivy_scanner import TrivyScanner
+        from app.engine.sast_semgrep import SemgrepScanner
 
         engine_configs = [
             ("secrets", SecretsScanner, settings.engines_secrets_enabled),
             ("sast", SastScanner, settings.engines_sast_enabled),
             ("iac", IacScanner, settings.engines_iac_enabled),
             ("best_practice", BestPracticeScanner, settings.engines_best_practice_enabled),
+            ("trivy", TrivyScanner, settings.engines_trivy_enabled),
+            ("sast_semgrep", SemgrepScanner, settings.engines_sast_semgrep_enabled),
         ]
 
         for name, cls, enabled in engine_configs:
             if enabled:
-                self._engines[name] = cls()
+                if name == "trivy":
+                    kwargs = dict(
+                        scanners=tuple(settings.trivy_scanners.split(",")),
+                        severity_threshold=settings.trivy_severity_threshold,
+                        cache_dir=settings.trivy_cache_dir,
+                        offline=settings.trivy_offline,
+                        timeout=settings.trivy_timeout,
+                    )
+                    self._engines[name] = cls(**kwargs)
+                else:
+                    self._engines[name] = cls()
                 logger.info(f"Engine '{name}' initialized")
 
         # Initialize AI engine if enabled
@@ -121,6 +135,18 @@ class Orchestrator:
                 logger.info(f"[{task.id}] Running AI enrichment on {len(all_findings)} findings")
                 all_findings = self._ai_engine.enrich(all_findings)
                 logger.info(f"[{task.id}] AI enrichment complete")
+
+            # Deduplicate findings by (engine, file_path, line, message)
+            seen = set()
+            deduped = []
+            for f in all_findings:
+                key = (f.engine, f.file_path, f.line, f.message)
+                if key not in seen:
+                    seen.add(key)
+                    deduped.append(f)
+            if len(deduped) < len(all_findings):
+                logger.info(f"[{task.id}] Dedup removed {len(all_findings) - len(deduped)} duplicate findings")
+            all_findings = deduped
 
             # Sort by severity
             severity_order = {"blocker": 0, "critical": 1, "major": 2, "minor": 3, "info": 4}

@@ -33,11 +33,21 @@ class Settings:
     port: int = 8080
     gitlab_url: str = "http://gitlab:80"
     gitlab_api_token: str = ""
+    gitlab_admin_token: str = ""
+    gitlab_bot_token: str = ""
+    gitlab_bot_username: str = "codeguard-bot"
     webhook_secret: str = ""
     engines_secrets_enabled: bool = True
     engines_sast_enabled: bool = True
     engines_iac_enabled: bool = True
     engines_best_practice_enabled: bool = True
+    engines_trivy_enabled: bool = True
+    engines_sast_semgrep_enabled: bool = False
+    trivy_scanners: str = "vuln,secret,misconfig"
+    trivy_severity_threshold: str = "MEDIUM"
+    trivy_cache_dir: str = "./data/trivy"
+    trivy_offline: bool = True
+    trivy_timeout: int = 300
     database_url: str = "sqlite+aiosqlite:///./data/guard.db"
     work_dir: str = "/tmp/pr-codeguard"
     ai_enabled: bool = False
@@ -65,6 +75,15 @@ class Settings:
     alert_email_from: str = ""
     alert_email_to: list[str] | None = None
 
+    # Auto scan settings
+    auto_scan_enabled: bool = True
+    auto_scan_time: str = "02:00"
+
+    # JWT settings
+    jwt_secret: str = "pr-codeguard-jwt-secret-2026"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 1440  # 24 hours
+
     @classmethod
     def from_env(cls) -> "Settings":
         _ensure_env_loaded()
@@ -73,11 +92,21 @@ class Settings:
             port=int(os.getenv("PORT", "8080")),
             gitlab_url=os.getenv("GITLAB_URL", "http://gitlab:80"),
             gitlab_api_token=os.getenv("GITLAB_API_TOKEN", ""),
+            gitlab_admin_token=os.getenv("GITLAB_ADMIN_TOKEN", ""),
+            gitlab_bot_token=os.getenv("GITLAB_BOT_TOKEN", ""),
+            gitlab_bot_username=os.getenv("GITLAB_BOT_USERNAME", "codeguard-bot"),
             webhook_secret=os.getenv("WEBHOOK_SECRET", ""),
             engines_secrets_enabled=os.getenv("ENGINES_SECRETS_ENABLED", "true").lower() == "true",
             engines_sast_enabled=os.getenv("ENGINES_SAST_ENABLED", "true").lower() == "true",
             engines_iac_enabled=os.getenv("ENGINES_IAC_ENABLED", "true").lower() == "true",
             engines_best_practice_enabled=os.getenv("ENGINES_BEST_PRACTICE_ENABLED", "true").lower() == "true",
+            engines_trivy_enabled=os.getenv("ENGINES_TRIVY_ENABLED", "true").lower() == "true",
+            engines_sast_semgrep_enabled=os.getenv("ENGINES_SAST_SEMGREP_ENABLED", "false").lower() == "true",
+            trivy_scanners=os.getenv("TRIVY_SCANNERS", "vuln,secret,misconfig"),
+            trivy_severity_threshold=os.getenv("TRIVY_SEVERITY_THRESHOLD", "MEDIUM"),
+            trivy_cache_dir=os.getenv("TRIVY_CACHE_DIR", "./data/trivy"),
+            trivy_offline=os.getenv("TRIVY_OFFLINE", "true").lower() == "true",
+            trivy_timeout=int(os.getenv("TRIVY_TIMEOUT", "300")),
             database_url=os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./data/guard.db"),
             work_dir=os.getenv("WORK_DIR", "/tmp/pr-codeguard"),
             ai_enabled=os.getenv("AI_ENABLED", "false").lower() == "true",
@@ -102,6 +131,11 @@ class Settings:
             alert_smtp_use_tls=os.getenv("ALERT_SMTP_USE_TLS", "true").lower() in ("true", "1"),
             alert_email_from=os.getenv("ALERT_EMAIL_FROM", ""),
             alert_email_to=os.getenv("ALERT_EMAIL_TO", "").split(",") if os.getenv("ALERT_EMAIL_TO") else [],
+            auto_scan_enabled=os.getenv("AUTO_SCAN_ENABLED", "true").lower() in ("true", "1"),
+            auto_scan_time=os.getenv("AUTO_SCAN_TIME", "02:00"),
+            jwt_secret=os.getenv("JWT_SECRET", "pr-codeguard-jwt-secret-2026"),
+            jwt_algorithm=os.getenv("JWT_ALGORITHM", "HS256"),
+            jwt_expire_minutes=int(os.getenv("JWT_EXPIRE_MINUTES", "1440")),
         )
 
 

@@ -110,8 +110,15 @@ class AgentBrain:
 
         # --- Phase 3: Build and post comment (only for scan events) ---
         if should_scan:
-            comment = await self._build_comment(findings, repo_url=repo_url)
+            comment = await self._build_comment(findings, repo_url=repo_url, mr_id=mr_id)
             if comment and settings.knowledge_enabled:
+                # Clean up previous bot comments before posting
+                try:
+                    from app.services.gitlab_client import GitLabClient
+                    gc = GitLabClient()
+                    gc.cleanup_bot_comments(repo_url, mr_id)
+                except Exception:
+                    pass  # Non-critical: proceed even if cleanup fails
                 comment_result = await self.executor.execute_step({
                     "tool": "write_comment",
                     "params": {
@@ -329,10 +336,20 @@ class AgentBrain:
     # Comment building
     # ------------------------------------------------------------------
 
-    async def _build_comment(self, findings, repo_url: str = "") -> str | None:
+    async def _build_comment(self, findings, repo_url: str = "", mr_id: int = 0) -> str | None:
         """Build a review comment from findings, enriched with knowledge context."""
         from app.services.comment_builder import CommentBuilder
+        from app.services.gitlab_client import GitLabClient
         builder = CommentBuilder()
+
+        # Fetch diff stats for change overview
+        diff_stats = None
+        if repo_url and mr_id:
+            try:
+                client = GitLabClient()
+                diff_stats = client.get_mr_diff_stats(repo_url, mr_id)
+            except Exception:
+                pass
 
         context_lines = []
         if settings.knowledge_enabled and repo_url:
@@ -347,7 +364,7 @@ class AgentBrain:
             except Exception as e:
                 logger.debug("Failed to enrich comment with context: %s", e)
 
-        comment = builder.build_review(findings)
+        comment = builder.build_review(findings, diff_stats=diff_stats)
         if context_lines:
             comment += "\n" + "\n".join(context_lines)
 

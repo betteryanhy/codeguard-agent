@@ -32,8 +32,12 @@ class RepoManager:
             return repo_url
         parsed = urlparse(repo_url)
         if parsed.scheme in ("http", "https") and not parsed.username:
-            # Replace localhost with 127.0.0.1 to avoid IPv6 resolution issues
+            # Replace Docker-internal hostnames with 127.0.0.1:8081
             netloc = parsed.netloc.replace("localhost", "127.0.0.1")
+            if netloc == "gitlab":
+                netloc = "127.0.0.1:8081"
+            elif netloc.startswith("gitlab:"):
+                netloc = netloc.replace("gitlab:", "127.0.0.1:", 1)
             # Inject oauth2:token as credentials
             netloc = f"oauth2:{settings.gitlab_api_token}@{netloc}"
             parsed = parsed._replace(netloc=netloc)
@@ -56,16 +60,16 @@ class RepoManager:
             git.exc.GitCommandError: If clone fails
         """
         # Create a safe directory name from repo URL
-        safe_name = repo_url.replace("://", "_").replace("/", "_").replace(".", "_")
+        safe_name = repo_url.replace("://", "_").replace("/", "_").replace(".", "_").replace(":", "_")
         clone_dir = os.path.join(self.base_dir, f"{safe_name}_mr{mr_id}")
 
         # Clean up if exists
         if os.path.exists(clone_dir):
             _rmtree(clone_dir)
 
-        # Clone with depth=1 for speed
+        # Full clone (depth=1 causes Windows lock file issues)
         auth_url = self._inject_auth(repo_url)
-        Repo.clone_from(auth_url, clone_dir, branch=branch, depth=1)
+        Repo.clone_from(auth_url, clone_dir, branch=branch, depth=None)
         return clone_dir
 
     def cleanup(self, clone_dir: str):

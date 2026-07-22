@@ -10,6 +10,7 @@ from app.tools.baseline_builder import BaselineBuilderTool
 from app.tools.diff_analyzer import DiffAnalyzerTool
 from app.tools.knowledge_writer import KnowledgeWriterTool
 from app.tools.knowledge_reader import KnowledgeReaderTool
+from app.tools.diff_fetcher import DiffFetcherTool
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ class ToolExecutor:
         self.register(DiffAnalyzerTool())
         self.register(KnowledgeWriterTool())
         self.register(KnowledgeReaderTool())
+        self.register(DiffFetcherTool())
 
     def register(self, tool: BaseTool):
         """Register a tool by its name."""

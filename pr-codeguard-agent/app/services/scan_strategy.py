@@ -49,6 +49,7 @@ class ScanStrategy:
         "sast": True,
         "iac": True,
         "best_practice": True,
+        "trivy": True,
     })
     branch_trigger_patterns: list = field(default_factory=lambda: [
         "feature/*", "fix/*", "hotfix/*", "test/*",
@@ -64,12 +65,15 @@ class ScanStrategy:
 
     def to_dict(self) -> dict:
         d = asdict(self)
-        d["created_at"] = (
-            self.created_at.isoformat() if self.created_at else None
-        )
-        d["updated_at"] = (
-            self.updated_at.isoformat() if self.updated_at else None
-        )
+        # Handle both datetime and string types for DB compatibility
+        def _fmt(val):
+            if isinstance(val, datetime):
+                return val.isoformat()
+            if isinstance(val, str):
+                return val
+            return None
+        d["created_at"] = _fmt(self.created_at)
+        d["updated_at"] = _fmt(self.updated_at)
         return d
 
     def is_default(self) -> bool:
@@ -145,25 +149,61 @@ class ScanStrategyManager:
 
     # ── CRUD ─────────────────────────────────────────────────────────
 
-    def get_strategy(self, repo_url: str) -> ScanStrategy:
-        """Get strategy for a specific repo, fallback to default."""
-        if repo_url in self._cache:
-            return self._cache[repo_url]
-        # Fallback to default
+    def get_default(self) -> ScanStrategy:
+        """Get the global default strategy."""
         return self._cache.get("__default__", DEFAULT_STRATEGY)
 
+    def get_strategy(self, repo_url: str) -> ScanStrategy:
+        """Get effective strategy for a repo.
+
+        Priority: per-repo overrides > global defaults.
+        Returns a merged strategy where each field comes from the per-repo
+        config if it was explicitly overridden, otherwise from the global default.
+        This ensures that changes to the global default propagate to repos
+        that haven't explicitly overridden a given field.
+        """
+        default = self.get_default()
+        if repo_url == "__default__" or repo_url not in self._cache:
+            return default
+
+        per_repo = self._cache[repo_url]
+
+        # Detect which fields were explicitly overridden by comparing
+        # the per-repo values against the original factory defaults
+        original_defaults = ScanStrategy()
+        overrides = {}
+        for field in ScanStrategy.__dataclass_fields__:
+            if field in ("repo_url", "created_at", "updated_at"):
+                continue
+            per_repo_val = getattr(per_repo, field)
+            orig_val = getattr(original_defaults, field)
+            if per_repo_val != orig_val:
+                overrides[field] = per_repo_val
+
+        # Start with current global defaults, overlay explicit overrides
+        merged_dict = default.to_dict()
+        merged_dict["repo_url"] = repo_url
+        merged_dict.update(overrides)
+        merged_dict["created_at"] = per_repo.created_at or default.created_at
+        merged_dict["updated_at"] = per_repo.updated_at or default.updated_at
+
+        return ScanStrategy(**merged_dict)
+
     def list_strategies(self) -> list[ScanStrategy]:
-        """List all configured strategies (including default)."""
-        result = []
-        if "__default__" in self._cache:
-            result.append(self._cache["__default__"])
-        for repo_url, s in self._cache.items():
-            if repo_url != "__default__":
-                result.append(s)
-        return result
+        """List all per-repo strategies with their effective (merged) config."""
+        return [
+            self.get_strategy(repo_url)
+            for repo_url in self._cache
+            if repo_url != "__default__"
+        ]
 
     def save_strategy(self, strategy: ScanStrategy) -> bool:
-        """Save or update a strategy."""
+        """Save or update a strategy.
+
+        Per-repo strategies are stored as diffs (only fields that differ from
+        the current global default). This ensures that changes to the global
+        default propagate to repos that haven't explicitly overridden a field.
+        """
         now = datetime.utcnow()
         if strategy.repo_url in self._cache:
             strategy.updated_at = now
@@ -173,11 +213,26 @@ class ScanStrategyManager:
 
         conn = self._connect()
         try:
-            config_dict = asdict(strategy)
-            config_dict.pop("repo_url", None)
+            if strategy.repo_url != "__default__":
+                # Per-repo: store only diff vs current global default
+                default = self.get_default()
+                diff = {}
+                for field in ScanStrategy.__dataclass_fields__:
+                    if field in ("repo_url", "created_at", "updated_at"):
+                        continue
+                    strat_val = getattr(strategy, field)
+                    default_val = getattr(default, field)
+                    if strat_val != default_val:
+                        diff[field] = strat_val
+                config_dict = diff
+            else:
+                config_dict = asdict(strategy)
+                config_dict.pop("repo_url", None)
+
             # Convert datetimes to strings for JSON
-            config_dict["created_at"] = config_dict["created_at"].isoformat() if config_dict.get("created_at") else None
-            config_dict["updated_at"] = config_dict["updated_at"].isoformat() if config_dict.get("updated_at") else None
+            if strategy.created_at:
+                config_dict["created_at"] = strategy.created_at.isoformat()
+                config_dict["updated_at"] = strategy.updated_at.isoformat() if strategy.updated_at else strategy.created_at.isoformat()
 
             conn.execute(
                 """INSERT OR REPLACE INTO scan_strategies (repo_url, config, created_at, updated_at)
@@ -186,7 +241,20 @@ class ScanStrategyManager:
                  strategy.created_at, strategy.updated_at),
             )
             conn.commit()
-            self._cache[strategy.repo_url] = strategy
+
+            # Update cache: for per-repo, store factory defaults + overrides
+            if strategy.repo_url != "__default__":
+                full_config = {}
+                for field in ScanStrategy.__dataclass_fields__:
+                    if field in ("repo_url", "created_at", "updated_at"):
+                        continue
+                    full_config[field] = diff.get(field, getattr(ScanStrategy(), field))
+                full_config["repo_url"] = strategy.repo_url
+                full_config["created_at"] = strategy.created_at
+                full_config["updated_at"] = strategy.updated_at
+                self._cache[strategy.repo_url] = ScanStrategy(**full_config)
+            else:
+                self._cache[strategy.repo_url] = strategy
             return True
         except Exception as e:
             logger.error("Failed to save strategy for %s: %s", strategy.repo_url, e)
